@@ -68,8 +68,22 @@ with open('cc3_cn_r.json') as json_file:
 
 
 #### GROUPING BY COUNTRIES 
+df_group_country = df_daily_report.groupby('Country_Region')
+list_countries = []
+for i,g in df_group_country:
+    list_countries.append({'Country_Region' :g['Country_Region'].unique()[0],
+                                'Confirmed':g['Confirmed'].sum(),\
+                                'Active':g['Active'].sum(),\
+                                'Recovered':g['Recovered'].sum(),\
+                                'Deaths':g['Deaths'].sum(),\
+                                'Incidence_Rate':round(g['Incident_Rate'].mean(),3),\
+                                'Case_Fatality_Ratio':round(g['Case_Fatality_Ratio'].mean(),3)})
 
+df_countries = pd.DataFrame(list_countries)
+#print(df_countries.head())
 
+df_countries['CODE'] = df_countries['Country_Region'].map(cc3_cn_r)
+df_countries = df_countries.dropna(subset=['CODE'])
 #REARRANGING COLUMNS
 
 
@@ -107,11 +121,6 @@ df_data_recovered = pd.melt(df_excluded_recovered, id_vars=['Country/Region'], v
 # print(df_data_recovered.head())
 
 countries = df_data_recovered['Country/Region'].unique() 
-
-
-## LOADING NEWS ARTICLES
-
-news_articles_list = open("covid_news_articles.csv", "r",encoding='utf-8').readlines()
 
 
 BS = "https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
@@ -201,32 +210,90 @@ dropdown_countries = dcc.Dropdown(
 
 
 
-
-
-#---------------------------- CONFIRMED AND RECOVERED GRAPHS ---------------------------------#
-
-
 #----------------------- RADIO BUTTON WORLD MAP -------------------------------------------------------#
-
+radio_buttons_world = dcc.RadioItems(
+    id='radio_buttons_world',
+    options=[
+    {'label':'Scatter Plot World', 'value':'scatter'},
+    {'label':'Choropleth World Plot', 'value':'choropleth'}],
+     value='scatter',
+     labelStyle={'display':'inline-block'})
 
 #-------------------------- WORLD MAP -----------------------------------------#
+fig_world = go.Figure(data=go.Choropleth(
+    locations=df_countries['CODE'],
+    z = df_countries['Confirmed'],
+    text=df_countries['Country_Region'],
+    colorscale='Reds',
+    autocolorscale=True,
+    colorbar_title='Number of Confirmed Cases'))
 
+fig_world.update_layout(
+    autosize=True,
+    geo=dict(
+        showcoastlines=True,
+        projection_type='equirectangular'
+    )
+)
 
 #------------------------ WORLD MAP 2 ----------------------------------------#
-
+fig_world_scatter = px.scatter_geo(df_countries, locations='CODE',
+                    hover_name='Country_Region', size='Confirmed',
+                    projection='natural earth', size_max=45)
 
 
 #---------------------------------- TABLE COVID ----------------------------------#
-
+table_covid = dash_table.DataTable(
+    id = 'datatable-interactivity',
+    columns = [{"name":i, "id":i, "deletable":False, "selectable":True} for i in df_countries.columns],
+    data = df_countries.to_dict('records'),
+    editable = True,
+    filter_action = "native",
+    sort_action = "native",
+    row_deletable = False,
+    page_action = "native",
+    page_current = 0,
+    page_size = 15,
+    style_data_conditional = [{
+        'if':{'row_index':'odd'}, 
+            'backgroundColor':'rgb(248,248,248)'}],
+    style_header={
+        'backgroundColor':'rgb(230,230,230)',
+        'fontWeight':'bold',
+        'whiteSpace':'normal',
+        'height':'auto',
+        'lineHeight':'15px' 
+    },
+    style_data={
+        'whiteSpace':'normal',
+        'height':'auto'
+    },
+    style_table={
+    'overflowY':'auto'
+    },
+    style_as_list_view=False, 
+    )
 
 
 #------------------------------------- VACCINE COUNTRIES DROPDOWN ------------------------------------#
-
+dropdown_vaccine_timeline = dcc.Dropdown(
+    id='dropdown_vaccine_timeline',
+    options=[{'label':x, 'value':x} for x in countries_vacc],
+    value='World',
+    clearable=False,
+    multi=False)
 
 #----------------------------- VACCINE DATA SELECTION -------------------------------------#
+radio_button_vaccine = dcc.RadioItems(
+    id = 'radio_button_vaccine',
+    options = [
+        {'label':'Total Vaccinations', 'value':'total_vaccinations'},
+        {'label':'People Vaccinated per Hundred', 'value':'people_vaccinated_per_hundred'},
+        {'label':'People Fully Vaccinated per Hundred', 'value':'people_fully_vaccinated_per_hundred'}],
+        value='people_vaccinated_per_hundred',
+        labelStyle={'display':'inline-block'}
+        )
 
-
-#------------------------ NEWS CARDS ----------------------------------------------#
 
 
 
@@ -291,14 +358,19 @@ app.layout = html.Div(children=[navbar,
         classification is based on the United Nations Geoscheme."),width=10)],justify='center'),
     
     #TABLE
+    dbc.Row([dbc.Col(table_covid,width=10)],justify='center'),
 
     html.Br(),
     dbc.Row([dbc.Col(html.H5('World Map with Confirmed COVID-19 Cases'),width=10)],justify='center'),
     html.Br(),
 
     # RADIO BUTTONS
+    dbc.Row([dbc.Col(radio_buttons_world,width=10)],justify='center'),
     html.Br(),
+
     # WORLD GRAPH
+    dbc.Row([dbc.Col(dcc.Graph(id='update_world_graph'),width=10)],justify='center'),
+   
 
 
    
@@ -309,20 +381,23 @@ app.layout = html.Div(children=[navbar,
                         ,width=10)],justify='center'),
     dbc.Row([dbc.Col(html.P("The rollout was done on phase wise basis based on the age and health condition of the people.")\
                         ,width=10)],justify='center'),
+    
     #DROPDOWN VACCINE TIMELINE 
+    dbc.Row([dbc.Col(dropdown_vaccine_timeline,width=5)],justify='center'),
     
     #VACCINE TIMELINE GRAPH
+    dbc.Row([dbc.Col(dcc.Graph(id='vaccine_timeline'),width=10)],justify='center'),
     dbc.Row([dbc.Col(html.H5('Current Vaccination Status for Different Countries'),\
         width=10)],justify='center'),
     
     #RADTIO BUTTON VACCINE
+    dbc.Row([dbc.Col(radio_button_vaccine,width=10)],justify='center'),
+    
     
     #BAR GRAPH VACCINES
+    dbc.Row([dbc.Col( dcc.Graph(id='update_vaccine'),width=10)],justify='center'),
+   
     html.Br(),
-    dbc.Row([dbc.Col(html.H5('Find latest updates related to the COVID-19 Pandemic'),\
-        width=10)],justify='center'),
-    html.Br(),
-    #NEWS CARDS
 
     ]
     )
@@ -337,7 +412,6 @@ app.layout = html.Div(children=[navbar,
 @app.callback(
     Output("line-chart-confirmed", 'figure'),
     [Input('dropdown', 'value')])
-
 def update_line_chart_confirmed(countries):
     df_filtered_date = df_data_confirmed[df_data_confirmed['Country/Region'].isin(countries)]
     fig = px.line(df_filtered_date, x='date', y='value', color='Country/Region', title='Confirmed Cases', line_shape="hv")
@@ -348,17 +422,42 @@ def update_line_chart_confirmed(countries):
 @app.callback(
     Output("line-chart-recovered", 'figure'),
     [Input('dropdown', 'value')])
-
 def update_line_chart_recovered(countries):
     df_filtered_date = df_data_recovered[df_data_recovered['Country/Region'].isin(countries)]
     fig = px.line(df_filtered_date, x='date', y='value', color='Country/Region', title='Recovered Cases', line_shape="hv")
     return fig
 
 # WORLD GRAPH
+@app.callback(
+    Output("update_world_graph", 'figure'),
+    [Input('radio_buttons_world', 'value')])
+def update_world_graph(plot_type):
+    if plot_type == 'scatter':
+        return fig_world_scatter
+    elif plot_type == 'choropleth':
+        return fig_world
+
 
 # VACCINE TIMELINE
+@app.callback(
+    Output("vaccine_timeline", 'figure'),
+    [Input('dropdown_vaccine_timeline', 'value')])
+def vaccine_timeline(country):
+    df_vacc_filtered = df_vacc[df_vacc['location']==country]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df_vacc_filtered['date'], y=df_vacc_filtered['total_vaccinations'], fill='tonexty', name='Total Vaccination'))
+    fig.add_trace(go.Scatter(x=df_vacc_filtered['date'], y=df_vacc_filtered['people_fully_vaccinated'], fill='tozeroy', name='People Fully Vaccinated'))
+
+    fig.update_layout(xaxis_title='Date', yaxis_title='Total Count')
+    return fig
 
 # VACCINATION STATUS
+@app.callback(
+    Output("update_vaccine", 'figure'),
+    [Input('radio_button_vaccine', 'value')])
+def vaccination_status(parameter):
+    fig = px.bar(df_vacc_max, x='location', y=parameter, color_discrete_sequence=['green'], height=650)
+    return fig
 
 
 
